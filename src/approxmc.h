@@ -63,9 +63,26 @@ public:
     int solve(AppMCConfig _conf);
     string GenerateRandomBits(const uint32_t size, const uint32_t numhashes);
     string binary(const uint32_t x, const uint32_t length);
+    uint32_t SolutionsToReturn(uint32_t numSolutions);
+    void generate_samples();
     bool gen_rhs();
+    uint32_t ScalGen(
+        uint32_t samples
+        , uint32_t sampleCounter
+        , std::map<string, uint32_t>& solutionMap
+        , uint32_t* lastSuccessfulHashOffset
+        , double timeReference
+    );
+    int ScalGenCall(
+        uint32_t samples
+        , uint32_t sampleCounter
+        , std::map<string, uint32_t>& solutionMap
+        , uint32_t* lastSuccessfulHashOffset
+        , double timeReference
+    );
     uint32_t loThresh;
     uint32_t hiThresh;
+    uint32_t threshold_scalgen;
     SATSolver* solver = NULL;
     void printVersionInfo() const;
 
@@ -76,12 +93,20 @@ private:
     bool ScalAppMC(SATCount& count);
     bool add_hash(uint32_t num_xor_cls, vector<Lit>& assumps, uint32_t total_num_hashes);
     void SetHash(uint32_t clausNum, std::map<uint64_t,Lit>& hashVars, vector<Lit>& assumps);
+
     int correctReturnValue(const lbool ret) const;
+    void output_samples();
+
+    void add_solution_to_map(
+        const vector<lbool>& model
+        , std::map<std::string, uint32_t>* solutionMap) const;
 
     int64_t bounded_sol_count(
         uint32_t maxSolutions,
         const vector<Lit>& assumps,
-        const uint32_t hashCount
+        const uint32_t hashCount,
+        std::map<std::string, uint32_t>* solutionMap = NULL,
+        uint32_t minSolutions = 1
     );
 
     void readInAFile(SATSolver* solver2, const string& filename);

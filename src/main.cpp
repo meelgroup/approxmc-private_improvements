@@ -151,6 +151,26 @@ void add_appmc_options()
         , "Generate sparse XORs when possible")
     ("startiter", po::value(&conf.startiter)->default_value(conf.startiter)
         , "If positive, use instead of startiter computed by AppMC")
+    ("samples", po::value(&conf.samples)->default_value(conf.samples)
+        , "Number of random samples to generate")
+    ("indepsamples", po::value(&conf.only_indep_samples)->default_value(conf.only_indep_samples)
+        , "Should only output the independent vars from the samples")
+    ("sparse", po::value(&conf.sparse)->default_value(conf.sparse)
+        , "Generate sparse XORs when possible")
+    ("kappa", po::value(&conf.kappa)->default_value(conf.kappa)
+        , "Uniformity parameter (see TACAS-15 paper)")
+    ("multisample", po::value(&conf.multisample)->default_value(conf.multisample)
+        , "Return multiple samples from each call")
+    ("sampleout", po::value(&conf.sampleFilename)
+        , "Write samples to this file")
+    ("cmsindeponly", po::value(&conf.cms_indep_only)->default_value(conf.cms_indep_only)
+        , "Don't extend solution by SAT solver")
+    ("findmorexors", po::value(&conf.find_more_xors)->default_value(conf.find_more_xors)
+        , "Find more xors through cache usage in CMS")
+    ("startiter", po::value(&conf.startiter)->default_value(conf.startiter)
+        , "If positive, use instead of startiter computed by ScalMC")
+    ("callsPerSolver", po::value(&conf.callsPerSolver)->default_value(conf.callsPerSolver)
+        , "Number of ScalGen calls to make in a single solver, or 0 to use a heuristic")
     ;
 
     help_options.add(appmc_options);
@@ -418,10 +438,61 @@ int main(int argc, char** argv)
     }
     set_sampling_vars();
 
+    //ScalMC or scalgen????
+    if (conf.samples == 0) {
+        if (vm.count("sampleout")){
+            cerr << "ERROR: You did not give the '--samples N' option, but you gave the '--sampleout FNAME' option." << endl;
+            cout << "ERROR: This is confusing. Please give '--samples N' if you give '--sampleout FNAME'" << endl;
+            exit(-1);
+        }
+    } else {
+        if (conf.samples == 0 || conf.startiter == 0) {
+            if (conf.samples > 0) {
+                cout << "Using scalmc to compute startiter for ScalGen" << endl;
+                if (!vm["thresholdAC"].defaulted() || !vm["measurements"].defaulted()) {
+                    cout << "WARNING: manually-specified thresholdAC and/or measurements may"
+                         << " not be large enough to guarantee correctness of ScalGen." << endl
+                         << "Omit those arguments to use safe default values." << endl;
+                } else {
+                    /* Fill in here the best parameters for scalmc achieving
+                     * epsilon=0.8 and delta=0.177 as required by ScalGen */
+                    conf.threshold = 73;
+                    conf.measurements = 11;
+                }
+            } else if(vm["measurements"].defaulted()) {
+                /* Compute tscalmc */
+                double delta = 0.2;
+                double confidence = 1.0 - delta;
+                int bestIteration = iterationConfidences.size() - 1;
+                int worstIteration = 0;
+                int currentIteration = (worstIteration + bestIteration) / 2;
+                if (iterationConfidences[bestIteration] >= confidence)
+                {
+                    while (currentIteration != worstIteration)
+                    {
+                        if (iterationConfidences[currentIteration] >= confidence)
+                        {
+                            bestIteration = currentIteration;
+                            currentIteration = (worstIteration + currentIteration) / 2;
+                        }
+                        else
+                        {
+                            worstIteration = currentIteration;
+                            currentIteration = (currentIteration + bestIteration) / 2;
+                        }
+                    }
+                    conf.measurements = (2 * bestIteration) + 1;
+                }
+                else
+                    conf.measurements = ceil(17 * log2(3.0 / delta));
+            }
+        }
+    }
+
     if (conf.start_iter > conf.sampling_set.size()) {
-        cout << "[appmc] ERROR: Manually-specified start_iter"
-             "is larger than the size of the sampling set.\n" << endl;
-        exit(-1);
+        cout << "[scalmc] ERROR: Manually-specified start_iter"
+             "is larger than the size of the independent set.\n" << endl;
+        return -1;
     }
 
     return appmc->solve(conf);

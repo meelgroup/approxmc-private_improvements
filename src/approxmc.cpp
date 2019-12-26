@@ -139,7 +139,9 @@ bool AppMC::add_hash(uint32_t num_xor_cls, vector<Lit>& assumps, uint32_t total_
 int64_t AppMC::bounded_sol_count(
         uint32_t maxSolutions,
         const vector<Lit>& assumps,
-        const uint32_t hashCount
+        const uint32_t hashCount,
+        std::map<std::string, uint32_t>* solutionMap,
+        uint32_t minSolutions
 ) {
     cout << "[appmc] "
     "[ " << std::setw(7) << std::setprecision(2) << std::fixed
@@ -149,6 +151,7 @@ int64_t AppMC::bounded_sol_count(
     << " -- hashes active: " << hashCount << endl;
 
     //Set up things for adding clauses that can later be removed
+    std::vector<vector<lbool>> modelsSet;
     vector<lbool> model;
     vector<Lit> new_assumps(assumps);
     solver->new_var();
@@ -185,6 +188,7 @@ int64_t AppMC::bounded_sol_count(
             break;
         }
         model = solver->get_model();
+        modelsSet.push_back(model);
 
         if (solutions < maxSolutions) {
             vector<Lit> lits;
@@ -204,6 +208,22 @@ int64_t AppMC::bounded_sol_count(
         solutions++;
     }
 
+    //we have all solutions now, scalgen variant
+    if (solutions < maxSolutions && solutions >= minSolutions && solutionMap) {
+        assert(minSolutions > 0);
+        std::vector<int> modelIndices;
+        for (uint32_t i = 0; i < modelsSet.size(); i++) {
+            modelIndices.push_back(i);
+        }
+        std::shuffle(modelIndices.begin(), modelIndices.end(), randomEngine);
+
+        uint32_t numSolutionsToReturn = SolutionsToReturn(solutions);
+        for (uint32_t i = 0; i < numSolutionsToReturn; i++) {
+            model = modelsSet.at(modelIndices.at(i));
+            add_solution_to_map(model, solutionMap);
+        }
+    }
+
     //Remove clauses added
     vector<Lit> cl_that_removes;
     cl_that_removes.push_back(Lit(act_var, false));
@@ -211,6 +231,35 @@ int64_t AppMC::bounded_sol_count(
 
     assert(ret != l_Undef);
     return solutions;
+}
+
+void AppMC::add_solution_to_map(
+    const vector<lbool>& model
+    , std::map<std::string, uint32_t>* solutionMap
+) const {
+    assert(solutionMap != NULL);
+
+    std::stringstream  solution;
+    if (conf.only_indep_samples) {
+        for (uint32_t j = 0; j < conf.sampling_set.size(); j++) {
+            uint32_t var = conf.sampling_set[j];
+            assert(model[var] != l_Undef);
+            solution << ((model[var] != l_True) ? "-":"") << var + 1 << " ";
+        }
+    } else {
+        for(uint32_t var = 0; var < model.size(); var++) {
+            assert(model[var] != l_Undef);
+            solution << ((model[var] != l_True) ? "-":"") << var + 1 << " ";
+        }
+    }
+    solution << "0";
+
+    std::string sol_str = solution.str();
+    std::map<string, uint32_t>::iterator it = solutionMap->find(sol_str);
+    if (it == solutionMap->end()) {
+        (*solutionMap)[sol_str] = 0;
+    }
+    (*solutionMap)[sol_str] += 1;
 }
 
 bool AppMC::gen_rhs()
@@ -250,26 +299,100 @@ int AppMC::solve(AppMCConfig _conf)
     openLogFile();
     randomEngine.seed(conf.seed);
     total_runtime = cpuTimeTotal();
-    cout << "[appmc] Using start iteration " << conf.start_iter << endl;
+    if (conf.samples == 0) {
+        cout << "[appmc] Using start iteration " << conf.start_iter << endl;
 
-    SATCount solCount;
-    bool finished = count(solCount);
-    assert(finished);
+        SATCount solCount;
+        bool finished = count(solCount);
+        assert(finished);
 
-    cout << "[appmc] FINISHED AppMC T: " << (cpuTimeTotal() - startTime) << " s" << endl;
-    if (solCount.hashCount == 0 && solCount.cellSolCount == 0) {
-        cout << "[appmc] Formula was UNSAT " << endl;
+        cout << "[appmc] FINISHED AppMC T: " << (cpuTimeTotal() - startTime) << " s" << endl;
+        if (solCount.hashCount == 0 && solCount.cellSolCount == 0) {
+            cout << "[appmc] Formula was UNSAT " << endl;
+        }
+
+        if (conf.verb > 2) {
+            solver->print_stats();
+        }
+
+        cout << "[appmc] Number of solutions is: "
+        << solCount.cellSolCount
+         << " x 2^" << solCount.hashCount << endl;
+    } else {
+        if (conf.startiter > conf.sampling_set.size()) {
+            cerr << "ERROR: Manually-specified startiter for ScalGen"
+                 "is larger than the size of the independent set.\n" << endl;
+            return -1;
+        }
+
+        /* Compute threshold via formula from TACAS-15 paper */
+        threshold_scalgen = ceil(4.03 * (1 + (1/conf.kappa)) * (1 + (1/conf.kappa)));
+
+        if (conf.startiter == 0) {
+            SATCount solCount;
+            cout << "[appmc] ScalGen starting from iteration " << conf.startiter << endl;
+
+            bool finished = false;
+            finished = count(solCount);
+            assert(finished);
+            cout << "[appmc] finished counting solutions in " << (cpuTimeTotal() - startTime) << " s" << endl;
+
+            if (solCount.hashCount == 0 && solCount.cellSolCount == 0) {
+                cout << "[appmc] The input formula is unsatisfiable." << endl;
+                return correctReturnValue(l_False);
+            }
+
+            if (conf.verb) {
+                solver->print_stats();
+            }
+
+            cout << "[appmc] Number of solutions is: "
+            << solCount.cellSolCount << " x 2^" << solCount.hashCount << endl;
+
+            double si = round(solCount.hashCount + log2(solCount.cellSolCount)
+                + log2(1.8) - log2(threshold_scalgen)) - 2;
+            if (si > 0)
+                conf.startiter = si;
+            else
+                conf.startiter = 0;   /* Indicate ideal sampling case */
+        } else {
+            cout << "Using manually-specified startiter for ScalGen" << endl;
+        }
+        generate_samples();
+        output_samples();
     }
-
-    if (conf.verb > 2) {
-        solver->print_stats();
-    }
-
-    cout << "[appmc] Number of solutions is: "
-    << solCount.cellSolCount
-     << " x 2^" << solCount.hashCount << endl;
 
     return correctReturnValue(l_True);
+}
+
+void AppMC::output_samples()
+{
+    /* Output samples */
+    std::ostream* os;
+    std::ofstream* sampleFile = NULL;
+    if (!conf.sampleFilename.empty())
+    {
+        sampleFile = new std::ofstream;
+        sampleFile->open(conf.sampleFilename.c_str());
+        if (!(*sampleFile)) {
+            cout
+            << "ERROR: Couldn't open file '"
+            << conf.sampleFilename
+            << "' for writing!"
+            << endl;
+            std::exit(-1);
+        }
+        os = sampleFile;
+    } else {
+        os = &cout;
+    }
+
+    for (const auto& sol: globalSolutionMap) {
+        std::vector<uint32_t> counts = sol.second;
+        // TODO this will need to be changed once multithreading is implemented
+        *os << std::setw(5) << std::left << counts[0] << " : "  << sol.first.c_str() << endl;
+    }
+    delete sampleFile;
 }
 
 void AppMC::SetHash(uint32_t clausNum, std::map<uint64_t,Lit>& hashVars, vector<Lit>& assumps)
@@ -320,6 +443,8 @@ bool AppMC::count(SATCount& count)
         //Din't find at least threshold+1
         if (currentNumSolutions <= conf.threshold) {
             cout << "[appmc] Did not find at least threshold+1 (" << conf.threshold << ") we found only " << currentNumSolutions << ", exiting AppMC" << endl;
+            output_samples();
+
             count.cellSolCount = currentNumSolutions;
             count.hashCount = 0;
             return true;
@@ -485,4 +610,224 @@ int AppMC::correctReturnValue(const lbool ret) const
     }
 
     return retval;
+}
+
+
+/////////////// scalgen ////////////////
+/* Number of solutions to return from one invocation of ScalGen. */
+uint32_t AppMC::SolutionsToReturn(uint32_t numSolutions)
+{
+    if (conf.startiter == 0)   // TODO improve hack for ideal sampling case?
+        return numSolutions;
+    else if (conf.multisample)
+        return loThresh;
+    else
+        return 1;
+}
+
+void AppMC::generate_samples()
+{
+    hiThresh = ceil(1 + (1.4142136 * (1 + conf.kappa) * threshold_scalgen));
+    loThresh = floor(threshold_scalgen / (1.4142136 * (1 + conf.kappa)));
+    uint32_t samplesPerCall = SolutionsToReturn(conf.samples);
+    uint32_t callsNeeded = (conf.samples + samplesPerCall - 1) / samplesPerCall;
+    cout << "[appmc] starting sample generation. loThresh " << loThresh
+    << ", hiThresh " << hiThresh
+    << ", startiter " << conf.startiter << endl;
+
+    cout << "[appmc] Outputting " << samplesPerCall << " solutions from each ScalGen call" << endl;
+
+    uint32_t numCallsInOneLoop = 0;
+    if (conf.callsPerSolver == 0) {
+        // TODO: does this heuristic still work okay?
+        uint32_t si = conf.startiter > 0 ? conf.startiter : 1;
+        numCallsInOneLoop = std::min(solver->nVars() / (si * 14), callsNeeded);
+        if (numCallsInOneLoop == 0) {
+            numCallsInOneLoop = 1;
+        }
+    } else {
+        numCallsInOneLoop = conf.callsPerSolver;
+        cout << "[appmc] Using manually-specified callsPerSolver: " << conf.callsPerSolver << endl;
+    }
+
+    uint32_t numCallLoops = callsNeeded / numCallsInOneLoop;
+    uint32_t remainingCalls = callsNeeded % numCallsInOneLoop;
+
+    cout << "[appmc] Making " << numCallLoops << " loops."
+         << " calls per loop: " << numCallsInOneLoop
+         << " remaining: " << remainingCalls << endl;
+    uint32_t sampleCounter = 0;
+    std::map<string, uint32_t> threadSolutionMap;
+    double allThreadsTime = 0;
+    uint32_t allThreadsSampleCount = 0;
+    double threadStartTime = cpuTimeTotal();
+    uint32_t lastSuccessfulHashOffset = 0;
+
+    if (conf.startiter > 0) {
+        ///Perform extra ScalGen calls that don't fit into the loops
+        if (remainingCalls > 0) {
+            sampleCounter = ScalGenCall(
+                remainingCalls, sampleCounter
+                , threadSolutionMap
+                , &lastSuccessfulHashOffset, threadStartTime);
+        }
+
+        // Perform main ScalGen call loops
+        for (uint32_t i = 0; i < numCallLoops; i++) {
+            sampleCounter = ScalGenCall(
+                numCallsInOneLoop, sampleCounter, threadSolutionMap
+                , &lastSuccessfulHashOffset, threadStartTime);
+        }
+    } else {
+        /* Ideal sampling case; enumerate all solutions */
+        vector<Lit> assumps;
+        const uint32_t count = bounded_sol_count(
+            std::numeric_limits<uint32_t>::max() //maxsol
+            ,assumps //assumps
+            , 0 //number of hahes
+            , &threadSolutionMap //return sols here
+            , 1 //minsol
+        );
+        assert(count > 0);
+
+        for(auto&x : threadSolutionMap) {
+            x.second = 0;
+        }
+
+        std::uniform_int_distribution<unsigned> uid {0, count-1};
+        for (uint32_t i = 0; i < conf.samples; ++i) {
+            map<string, uint32_t>::iterator it = threadSolutionMap.begin();
+            for (uint32_t j = uid(randomEngine); j > 0; --j)    // TODO improve hack
+                ++it;
+            it->second += 1;
+        }
+    }
+
+    for (map<string, uint32_t>::iterator itt = threadSolutionMap.begin()
+            ; itt != threadSolutionMap.end()
+            ; itt++
+    ) {
+        string solution = itt->first;
+        map<string, std::vector<uint32_t>>::iterator itg = globalSolutionMap.find(solution);
+        if (itg == globalSolutionMap.end()) {
+            globalSolutionMap[solution] = std::vector<uint32_t>(1, 0);
+        }
+        globalSolutionMap[solution][0] += itt->second;
+        allThreadsSampleCount += itt->second;
+    }
+
+    double timeTaken = cpuTimeTotal() - threadStartTime;
+    allThreadsTime += timeTaken;
+    cout << "[appmc] Time for ScalGen: " << timeTaken << " s"
+    " -- Total time AppMC+ScalGen: " << cpuTimeTotal() << " s" << endl;
+
+    // TODO put this back once multithreading is implemented
+    //cout << "Total time for all ScalGen calls: " << allThreadsTime << " s" << endl;
+    cout << "[appmc] Samples generated: " << allThreadsSampleCount << endl;
+}
+
+uint32_t AppMC::ScalGen(
+    uint32_t loc_samples
+    , uint32_t sampleCounter
+    , std::map<string, uint32_t>& solutionMap
+    , uint32_t* lastSuccessfulHashOffset
+    , double timeReference
+)
+{
+    lbool ret = l_False;
+    uint32_t i, currentHashCount, currentHashOffset, hashOffsets[3];
+    vector<Lit> assumps;
+    for (i = 0; i < loc_samples; i++) {
+        map<uint64_t,Lit> hashVars; //map assumption var to XOR hash
+        sampleCounter ++;
+        ret = l_Undef;
+
+        hashOffsets[0] = *lastSuccessfulHashOffset;   // Start at last successful hash offset
+        if (hashOffsets[0] == 0) { // Starting at q-2; go to q-1 then q
+            hashOffsets[1] = 1;
+            hashOffsets[2] = 2;
+        } else if (hashOffsets[0] == 2) { // Starting at q; go to q-1 then q-2
+            hashOffsets[1] = 1;
+            hashOffsets[2] = 0;
+        }
+        for (uint32_t j = 0; j < 3; j++) {
+            currentHashOffset = hashOffsets[j];
+            currentHashCount = currentHashOffset + conf.startiter;
+            SetHash(currentHashCount, hashVars, assumps);
+
+            const uint64_t solutionCount = bounded_sol_count(
+                hiThresh
+                , assumps
+                , currentHashCount
+                , &solutionMap
+                , loThresh);
+
+            if (solutionCount < hiThresh && solutionCount >= loThresh) {
+                ret = l_True;
+            } else {
+                ret = l_False;
+            }
+
+            if (!conf.logfilename.empty()) {
+                logfile << "scalgen:"
+                << sampleCounter << ":" << currentHashCount << ":"
+                << std::fixed << std::setprecision(2) << (cpuTimeTotal() - timeReference) << ":"
+                << (int)(ret == l_False ? 1 : (ret == l_True ? 0 : 2)) << ":"
+                << solutionCount << endl;
+            }
+
+            // Number of solutions in correct range
+            if (ret == l_True) {
+                *lastSuccessfulHashOffset = currentHashOffset;
+                break;
+            } else { // Number of solutions too small or too large
+
+                // At q-1, and need to pick next hash count
+                if ((j == 0) && (currentHashOffset == 1)) {
+                    if (solutionCount < loThresh) {
+                        // Go to q-2; next will be q
+                        hashOffsets[1] = 0;
+                        hashOffsets[2] = 2;
+                    } else {
+                        // Go to q; next will be q-2
+                        hashOffsets[1] = 2;
+                        hashOffsets[2] = 0;
+                    }
+                }
+            }
+        }
+        if (ret != l_True) {
+            i --;
+        }
+        assumps.clear();
+        solver->simplify(&assumps);
+    }
+    return sampleCounter;
+}
+
+int AppMC::ScalGenCall(
+    uint32_t loc_samples
+    , uint32_t sampleCounter
+    , std::map<string, uint32_t>& solutionMap
+    , uint32_t* lastSuccessfulHashOffset
+    , double timeReference
+)
+{
+    //delete solver;
+    //solver = new SATSolver(&conf, &must_interrupt);
+    //solverToInterrupt = solver;
+
+    /* Heuristic: running solver once before adding any hashes
+     * tends to help performance (need to do this for ScalGen since
+     * we aren't necessarily starting from hashCount zero) */
+    solver->solve();
+
+    sampleCounter = ScalGen(
+                        loc_samples
+                        , sampleCounter
+                        , solutionMap
+                        , lastSuccessfulHashOffset
+                        , timeReference
+                    );
+    return sampleCounter;
 }
