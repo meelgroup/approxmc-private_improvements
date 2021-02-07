@@ -221,6 +221,26 @@ void Main::printUsage(char** argv) {
     printf(" --epsilon = <float> tolerance\n");
     printf(" --searchMode = {0,1}. Sets search mode to linear (0) or Logarithmic (1) (default=1)\n");
     printf("  --verbosity      = {0,1,2}\n");
+#ifdef USE_GAUSS
+    printf("  --gaussuntil     = <num> Depth until which Gaussian elimination is active.\n");
+    printf("                     Giving 0 switches off Gaussian elimination\n");
+    printf("  --nomatrixfind     Don't find distinct matrixes. Put all xors into one\n");
+    printf("                     big matrix\n");
+    printf("  --noordercol       Don't order variables in the columns of Gaussian\n");
+    printf("                     elimination. Effectively disables iterative reduction\n");
+    printf("                     of the matrix\n");
+    printf("  --noiterreduce     Don't reduce iteratively the matrix that is updated\n");
+    printf("  --maxmatrixrows    [0 - 2^32-1] Set maximum no. of rows for gaussian matrix.\n");
+    printf("                     Too large matrixes should bee discarded for\n");
+    printf("                     reasons of efficiency. Default: %d\n", gaussconfig.maxMatrixRows);
+    printf("  --minmatrixrows  = [0 - 2^32-1] Set minimum no. of rows for gaussian matrix.\n");
+    printf("                     Normally, too small matrixes are discarded for\n");
+    printf("                     reasons of efficiency. Default: %d\n", gaussconfig.minMatrixRows);
+    printf("  --savematrix     = [0 - 2^32-1] Save matrix every Nth decision level.\n");
+    printf("                     Default: %d\n", gaussconfig.only_nth_gauss_save);
+    printf("  --maxnummatrixes = [0 - 2^32-1] Maximum number of matrixes to treat.\n");
+    printf("                     Default: %d\n", gaussconfig.maxNumMatrixes);
+#endif //USE_GAUSS
 /*
     printf("  --polarity-mode  = {true,false,rnd,auto} [default: auto]. Selects the default\n");
     printf("                     polarity mode. Auto is the Jeroslow&Wang method\n");
@@ -233,8 +253,6 @@ void Main::printUsage(char** argv) {
     printf("                     on, pick one that in the 'num' most active vars useful\n");
     printf("                     for cryptographic problems, where the question is the key,\n");
     printf("                     which is usually small (e.g. 80 bits)\n");
-    printf("  --gaussuntil     = <num> Depth until which Gaussian elimination is active.\n");
-    printf("                     Giving 0 switches off Gaussian elimination\n");
     printf("  --restarts       = <num> [1 - 2^32-1] No more than the given number of\n");
     printf("                     restarts will be performed during search\n");
     printf("  --nonormxorfind    Don't find and collect >2-long xor-clauses from\n");
@@ -283,24 +301,7 @@ void Main::printUsage(char** argv) {
     printf("                     is SAT\n");
     printf("  --novarelim        Don't perform variable elimination as per Een and Biere\n");
     printf("  --nosubsume1       Don't perform clause contraction through resolution\n");
-#ifdef USE_GAUSS
-    printf("  --nomatrixfind     Don't find distinct matrixes. Put all xors into one\n");
-    printf("                     big matrix\n");
-    printf("  --noordercol       Don't order variables in the columns of Gaussian\n");
-    printf("                     elimination. Effectively disables iterative reduction\n");
-    printf("                     of the matrix\n");
-    printf("  --noiterreduce     Don't reduce iteratively the matrix that is updated\n");
-    printf("  --maxmatrixrows    [0 - 2^32-1] Set maximum no. of rows for gaussian matrix.\n");
-    printf("                     Too large matrixes should bee discarded for\n");
-    printf("                     reasons of efficiency. Default: %d\n", gaussconfig.maxMatrixRows);
-    printf("  --minmatrixrows  = [0 - 2^32-1] Set minimum no. of rows for gaussian matrix.\n");
-    printf("                     Normally, too small matrixes are discarded for\n");
-    printf("                     reasons of efficiency. Default: %d\n", gaussconfig.minMatrixRows);
-    printf("  --savematrix     = [0 - 2^32-1] Save matrix every Nth decision level.\n");
-    printf("                     Default: %d\n", gaussconfig.only_nth_gauss_save);
-    printf("  --maxnummatrixes = [0 - 2^32-1] Maximum number of matrixes to treat.\n");
-    printf("                     Default: %d\n", gaussconfig.maxNumMatrixes);
-#endif //USE_GAUSS
+
     //printf("  --addoldlearnts  = Readd old learnts for failed variable searching.\n");
     //printf("                     These learnts are usually deleted, but may help\n");
     printf("  --nohyperbinres    Don't add binary clauses when doing failed lit probing.\n");
@@ -791,6 +792,9 @@ void Main::printVersionInfo(const uint32_t verbosity) {
 #else
         printf("c compiled with non-gcc compiler\n");
 #endif
+#ifdef USE_GAUSS
+        printf("c Compiled with USE_GAUSS\n");
+#endif
     }
 }
 
@@ -932,8 +936,9 @@ int32_t Main::BoundedSATCount(uint32_t maxSolutions, Solver &solver, vec<Lit> &a
     //signal(SIGALRM, SIGALARM_handler);
      start_timer(conf.loopTimeout);
     while (current_nr_of_solutions < maxSolutions && ret == l_True) {
-
+        std::cout << "c current_nr_of_solutions: " << current_nr_of_solutions << std::endl;
         ret = solver.solve(allSATAssumptions);
+        //solver.printStats();
         current_nr_of_solutions++;
         if (ret == l_True && current_nr_of_solutions < maxSolutions) {
             vec<Lit> lits;
@@ -998,6 +1003,7 @@ SATCount Main::ApproxMC(Solver &solver, FILE* resLog) {
         upperFib = solver.independentSet.size();
         while (numExplored < solver.independentSet.size())
         {
+            std::cout << "c numExplored: " << numExplored << std::endl;
             if (conf.approxMCMode == LINEAR){
                 numExplored = hashCount;
             }
@@ -1019,6 +1025,7 @@ SATCount Main::ApproxMC(Solver &solver, FILE* resLog) {
                     (currentNumSolutions == (int32_t)(conf.pivotApproxMC + 1)),currentNumSolutions);
                 fflush(resLog);
             }
+            std::cout << "c currentNumSolutions: " << currentNumSolutions << std::endl;
             if (currentNumSolutions <= -1){
                 assumptions.clear();
                 hashVars.clear();
@@ -1101,7 +1108,7 @@ SATCount Main::ApproxMC(Solver &solver, FILE* resLog) {
 	}
 	medSolCount = findMedian(medianComputeList);
 	if (j%2 == 0){
-	printf(" With confidence %f, Esimate of the number of solutions is: %d * 2^%d\n",
+	printf("c With confidence %f, Esimate of the number of solutions is: %d * 2^%d\n",
                 confidence[j+1], medSolCount, minHash);
 	}
 	assumptions.clear();
@@ -1130,6 +1137,7 @@ bool Main::printSolutions(Solver& solver, FILE* res){
 }
 int Main::singleThreadSolve() {
     printVersionInfo(1);
+    double mytime = cpuTime();
 
    int val; 
    std::string line;

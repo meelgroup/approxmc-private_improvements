@@ -240,6 +240,7 @@ namespace CMSat {
 
     protected:
         //gauss
+        bool new_xor_clause = false;
         bool clearGaussMatrixes();
         vector<Gaussian*> gauss_matrixes;
         void print_gauss_sum_stats();

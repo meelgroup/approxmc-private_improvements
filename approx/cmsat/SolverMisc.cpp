@@ -802,6 +802,7 @@ void Solver::printStats() {
 #ifdef USE_GAUSS
     if (gaussconfig.decision_until > 0) {
         std::cout << "c " << std::endl;
+        print_gauss_sum_stats();
         printStatsLine("c gauss unit truths ", get_sum_gauss_unit_truths());
         printStatsLine("c gauss called", get_sum_gauss_called());
         printStatsLine("c gauss conflicts ", get_sum_gauss_confl(), (double) get_sum_gauss_confl() / (double) get_sum_gauss_called() * 100.0, " %");

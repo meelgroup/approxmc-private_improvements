@@ -379,6 +379,7 @@ inside are decision variables, have not been replaced, eliminated, etc.
  */
 template<class T>
 XorClause* Solver::addXorClauseInt(T& ps, bool xorEqualFalse, const bool learnt) throw(std::out_of_range) {
+    new_xor_clause = true;
     assert(qhead == trail.size());
     assert(decisionLevel() == 0);
 
@@ -2995,7 +2996,16 @@ lbool Solver::solve(const vec<Lit>& assumps) {
     printRestartStat("B");
     uint64_t lastConflPrint = conflicts;
     // Search:
+    if (new_xor_clause) {
+        clearGaussMatrixes();
+        XorFinder xorFinder(*this, clauses);
+        if (!xorFinder.fullFindXors(3, 7)) return l_False;
+        if (status == l_Undef && ok && !matrixFinder->findMatrixes())
+            status = l_False;
+        new_xor_clause = false;
+    }
     while (status == l_Undef && starts < conf.maxRestarts) {
+
 #ifdef DEBUG_VARELIM
         assert(!subsumer || subsumer->checkElimedUnassigned());
         assert(xorSubsumer->checkElimedUnassigned());
