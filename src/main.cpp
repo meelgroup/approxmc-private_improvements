@@ -281,6 +281,8 @@ void read_stdin()
     cout
     << "c Reading from standard input... Use '-h' or '--help' for help."
     << endl;
+    
+    cout<<"Hello There!"<<endl;
 
     #ifndef USE_ZLIB
     FILE * in = stdin;
@@ -312,6 +314,7 @@ void read_stdin()
 
 void print_num_solutions(uint32_t cellSolCount, uint32_t hashCount)
 {
+	 cout<<endl<<endl<<"Hello There!"<<endl<<endl<<endl;
     cout << "c [appmc] Number of solutions is: "
     << cellSolCount << "*2**" << hashCount << endl;
 

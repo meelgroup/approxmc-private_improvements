@@ -56,6 +56,8 @@ using std::cerr;
 using std::endl;
 using std::list;
 using std::map;
+using std::max;
+using std::min;
 
 Hash Counter::add_hash(uint32_t hash_index, SparseData& sparse_data)
 {
@@ -496,6 +498,9 @@ int Counter::find_best_sparse_match()
     return -1;
 }
 
+
+//logSATsearch algorithm
+
 //See Algorithm 2+3 in paper "Algorithmic Improvements in Approximate Counting
 //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
 //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
@@ -520,8 +525,10 @@ void Counter::one_measurement_count(
 
     int64_t total_max_xors = conf.sampling_set.size();
     int64_t numExplored = 0;
-    int64_t lowerFib = 0;
-    int64_t upperFib = total_max_xors;
+    int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
+    int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
+    int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
+    int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
 
     int64_t hashCount = mPrev;
     int64_t hashPrev = hashCount;
@@ -532,7 +539,8 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
-    while (numExplored < total_max_xors) {
+    while (numExplored < min(m1+m2+1, int64_t(conf.sampling_set.size()))) {
+        cout<<endl<<"numexplored: "<<numExplored<<endl<<endl;
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
 

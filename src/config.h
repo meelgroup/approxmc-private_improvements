@@ -48,6 +48,9 @@ struct Config {
     std::vector<uint32_t> sampling_set;
     std::string logfilename = "";
     int cms_detach_xor = 1;
+
+    //roughMC calculation
+    int64_t roughmcvalue=6;
 };
 
 #endif //APPMCCONFIG
