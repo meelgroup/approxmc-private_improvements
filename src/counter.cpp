@@ -569,7 +569,10 @@ void Counter::one_measurement_count(
         );
 
         if (num_sols < threshold + 1) {
-            numExplored = lowerFib + total_max_xors - hashCount;
+            //cout<<endl<<"First Case"<<endl<<endl;
+
+            numExplored = lowerFib + min(total_max_xors,conf.roughmcvalue + m2)-
+            max(int64_t(0),conf.roughmcvalue - m1) - hashCount;//replaced total maxxors by m1+m2
 
             //one less hash count had threshold solutions
             //this one has less than threshold
@@ -577,6 +580,8 @@ void Counter::one_measurement_count(
             if (threshold_sols.find(hashCount-1) != threshold_sols.end()
                 && threshold_sols[hashCount-1] == 1
             ) {
+
+                cout<<endl<<"Real Deal Hash count: "<<hashCount<<endl<<endl;
                 numHashList.push_back(hashCount);
                 numCountList.push_back(num_sols);
                 mPrev = hashCount;
@@ -588,9 +593,13 @@ void Counter::one_measurement_count(
             if (iter > 0 &&
                 std::abs(hashCount - mPrev) <= 2
             ) {
+                cout<<endl<<"First Case"<<endl<<endl;
+
                 //Doing linear, this is a re-count
                 upperFib = hashCount;
                 hashCount--;
+
+                cout<<endl<<"hashCount: "<<hashCount<<endl<<endl;
             } else {
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
@@ -620,8 +629,10 @@ void Counter::one_measurement_count(
                 }
             }
         } else {
+
             assert(num_sols == threshold + 1);
-            numExplored = hashCount + total_max_xors - upperFib;
+            numExplored = hashCount +  min(total_max_xors,conf.roughmcvalue + m2)-
+            max(int64_t(0),conf.roughmcvalue - m1)- upperFib;
 
             //success record for +1 hashcount exists and is 0
             //so one-above hashcount was below threshold, this is above
