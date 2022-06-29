@@ -132,15 +132,6 @@ private:
     );
     void simplify();
 
-
-    ///////////////////////////////
-    //new m values for logSATsearch
-    ///////////////////////////////
-    int64_t m_lower_bound();
-    int64_t m_upper_bound();
-
-
-
     ////////////////
     //Helper functions
     ////////////////

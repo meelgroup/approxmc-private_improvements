@@ -56,8 +56,6 @@ using std::cerr;
 using std::endl;
 using std::list;
 using std::map;
-using std::max;
-using std::min;
 
 Hash Counter::add_hash(uint32_t hash_index, SparseData& sparse_data)
 {
@@ -498,9 +496,6 @@ int Counter::find_best_sparse_match()
     return -1;
 }
 
-
-//logSATsearch algorithm
-
 //See Algorithm 2+3 in paper "Algorithmic Improvements in Approximate Counting
 //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
 //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
@@ -525,10 +520,8 @@ void Counter::one_measurement_count(
 
     int64_t total_max_xors = conf.sampling_set.size();
     int64_t numExplored = 0;
-    int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
-    int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
-    int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
-    int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
+    int64_t lowerFib = 0;
+    int64_t upperFib = total_max_xors;
 
     int64_t hashCount = mPrev;
     int64_t hashPrev = hashCount;
@@ -539,8 +532,7 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
-    while (numExplored < min(m1+m2+1, int64_t(conf.sampling_set.size()))) {
-        cout<<endl<<"numexplored: "<<numExplored<<endl<<endl;
+    while (numExplored < total_max_xors) {
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
 
@@ -569,10 +561,7 @@ void Counter::one_measurement_count(
         );
 
         if (num_sols < threshold + 1) {
-            //cout<<endl<<"First Case"<<endl<<endl;
-
-            numExplored = lowerFib + min(total_max_xors,conf.roughmcvalue + m2)-
-            max(int64_t(0),conf.roughmcvalue - m1) - hashCount;//replaced total maxxors by m1+m2
+            numExplored = lowerFib + total_max_xors - hashCount;
 
             //one less hash count had threshold solutions
             //this one has less than threshold
@@ -580,8 +569,6 @@ void Counter::one_measurement_count(
             if (threshold_sols.find(hashCount-1) != threshold_sols.end()
                 && threshold_sols[hashCount-1] == 1
             ) {
-
-                cout<<endl<<"Real Deal Hash count: "<<hashCount<<endl<<endl;
                 numHashList.push_back(hashCount);
                 numCountList.push_back(num_sols);
                 mPrev = hashCount;
@@ -593,13 +580,9 @@ void Counter::one_measurement_count(
             if (iter > 0 &&
                 std::abs(hashCount - mPrev) <= 2
             ) {
-                cout<<endl<<"First Case"<<endl<<endl;
-
                 //Doing linear, this is a re-count
                 upperFib = hashCount;
                 hashCount--;
-
-                cout<<endl<<"hashCount: "<<hashCount<<endl<<endl;
             } else {
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
@@ -629,10 +612,8 @@ void Counter::one_measurement_count(
                 }
             }
         } else {
-
             assert(num_sols == threshold + 1);
-            numExplored = hashCount +  min(total_max_xors,conf.roughmcvalue + m2)-
-            max(int64_t(0),conf.roughmcvalue - m1)- upperFib;
+            numExplored = hashCount + total_max_xors - upperFib;
 
             //success record for +1 hashcount exists and is 0
             //so one-above hashcount was below threshold, this is above
