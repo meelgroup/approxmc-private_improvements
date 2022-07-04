@@ -854,3 +854,81 @@ bool Counter::check_model_against_hash(const Hash& h, const vector<lbool>& model
     //hence return !rhs
     return !rhs;
 }
+
+int64_t Counter::roughmc()
+{
+    SparseData sparse_data(-1);
+
+    HashesModels hm;
+    int64_t linearHashIterator=0;
+
+    int64_t total_max_xors = conf.sampling_set.size();
+    for(;linearHashIterator<=total_max_xors; linearHashIterator++){
+        const vector<Lit> assumps = set_num_hashes(linearHashIterator, hm.hashes, sparse_data);
+
+        SolNum sols = bounded_sol_count_for_roughmc(
+            &assumps, //assumptions to use
+            linearHashIterator,
+            &hm
+        );
+
+        const uint64_t num_sols = std::min<uint64_t>(sols.solutions,1);
+        if(num_sols<1) break;
+    }
+
+    return linearHashIterator;
+}
+
+SolNum Counter::bounded_sol_count_for_roughmc(
+        const vector<Lit>* assumps,
+        const uint32_t hashCount,
+        HashesModels* hm
+) {
+   
+    //Set up things for adding clauses that can later be removed
+    vector<Lit> new_assumps;
+    if (assumps) {
+        assert(assumps->size() == hashCount);
+        new_assumps = *assumps;
+    } else {
+        assert(hashCount == 0);
+    }
+
+    solver->new_var();
+    const uint32_t sol_ban_var = solver->nVars()-1;
+    new_assumps.push_back(Lit(sol_ban_var, true));
+
+    const uint64_t repeat = add_glob_banning_cls(hm, sol_ban_var, hashCount);
+    uint64_t solutions = repeat;
+    double last_found_time = cpuTimeTotal();
+    vector<vector<lbool>> models;
+    while (solutions < 1) {
+        lbool ret = solver->solve(&new_assumps);
+        //COZ_PROGRESS_NAMED("one solution")
+        assert(ret == l_False || ret == l_True);
+
+        if (ret != l_True) {
+            break;
+        }
+
+        //Add solution to set
+        solutions++;
+        const vector<lbool> model = solver->get_model();
+        //#ifdef SLOW_DEBUG
+        check_model(model, hm, hashCount);
+        //#endif
+        models.push_back(model);
+
+        //ban solution
+        vector<Lit> lits;
+        lits.push_back(Lit(sol_ban_var, false));
+        for (const uint32_t var: conf.sampling_set) {
+            assert(solver->get_model()[var] != l_Undef);
+            lits.push_back(Lit(var, solver->get_model()[var] == l_True));
+        }
+
+        solver->add_clause(lits);
+    }
+
+    return SolNum(solutions, repeat);
+}

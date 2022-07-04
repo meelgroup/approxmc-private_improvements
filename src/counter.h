@@ -112,6 +112,7 @@ public:
     ApproxMC::SolCount calc_est_count();
     void print_final_count_stats(ApproxMC::SolCount sol_count);
     const Constants constants;
+    int64_t roughmc();
 
 private:
     Config conf;
@@ -121,6 +122,11 @@ private:
     Hash add_hash(uint32_t total_num_hashes, SparseData& sparse_data);
     SolNum bounded_sol_count(
         uint32_t maxSolutions,
+        const vector<Lit>* assumps,
+        const uint32_t hashCount,
+        HashesModels* hm = NULL
+    );
+    SolNum bounded_sol_count_for_roughmc(
         const vector<Lit>* assumps,
         const uint32_t hashCount,
         HashesModels* hm = NULL
@@ -141,6 +147,7 @@ private:
         const int iter,
         SparseData sparse_data
     );
+    void one_measurement_count_for_roughmc(SparseData sparse_data);
     void write_log(
         bool sampling,
         int iter,
