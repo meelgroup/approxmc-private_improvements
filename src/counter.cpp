@@ -855,29 +855,61 @@ bool Counter::check_model_against_hash(const Hash& h, const vector<lbool>& model
     return !rhs;
 }
 
-int64_t Counter::roughmc()
-{
+
+int64_t Counter::roughmc(){
     SparseData sparse_data(-1);
 
     HashesModels hm;
-    int64_t linearHashIterator=0;
-
     int64_t total_max_xors = conf.sampling_set.size();
-    for(;linearHashIterator<=total_max_xors; linearHashIterator++){
-        const vector<Lit> assumps = set_num_hashes(linearHashIterator, hm.hashes, sparse_data);
+
+    int64_t lo=0;
+    int64_t hi= total_max_xors;
+    int64_t binaryHashIterator= (lo+hi)/2;
+    bool loop=true;
+    
+    while(loop){
+       // cout<<binaryHashIterator<<endl;
+        if(lo>=hi-1){loop=false;break;}
+        const vector<Lit> assumps = set_num_hashes(binaryHashIterator, hm.hashes, sparse_data);
 
         SolNum sols = bounded_sol_count_for_roughmc(
             &assumps, //assumptions to use
-            linearHashIterator,
+            binaryHashIterator,
             &hm
         );
+        const uint64_t num_curr_sols = std::min<uint64_t>(sols.solutions,1);
 
-        const uint64_t num_sols = std::min<uint64_t>(sols.solutions,1);
-        if(num_sols<1) break;
+        if(num_curr_sols<1){
+            hi= binaryHashIterator;
+            binaryHashIterator= (lo+hi)/2;
+        }
+        else{
+            const vector<Lit> assumps_next = set_num_hashes(binaryHashIterator+1, hm.hashes, sparse_data);
+
+            SolNum sols_next = bounded_sol_count_for_roughmc(
+                &assumps_next, //assumptions to use
+                binaryHashIterator+1,
+                &hm
+            );
+            const uint64_t num_next_sols = std::min<uint64_t>(sols_next.solutions,1);
+
+            if(num_next_sols<1){
+                loop=false;
+                break;
+            }
+            else{
+                lo=binaryHashIterator;
+                binaryHashIterator= (lo+hi)/2;
+            }
+        }
+
     }
 
-    return linearHashIterator;
+    return binaryHashIterator;
 }
+
+
+
 
 SolNum Counter::bounded_sol_count_for_roughmc(
         const vector<Lit>* assumps,
