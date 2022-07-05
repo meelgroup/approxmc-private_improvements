@@ -366,9 +366,9 @@ void Counter::set_up_probs_threshold_measurements(
         << endl;
     }
 
-    measurements = (int)std::ceil(std::log2(3.0/conf.delta)*17);
+    measurements = (int)std::ceil(std::log2(6.0/conf.delta)*17);
     for (int count = 0; count < 256; count++) {
-        if (constants.iterationConfidences[count] >= 1 - conf.delta) {
+        if (constants.iterationConfidences[count] >= 1 - conf.delta/2) {
             measurements = count*2+1;
             break;
         }
