@@ -50,7 +50,7 @@ struct Config {
     int cms_detach_xor = 1;
 
     //roughMC calculation
-    int64_t roughmcvalue=2;
+    int64_t roughmcvalue=241;
 };
 
 #endif //APPMCCONFIG

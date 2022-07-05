@@ -429,7 +429,6 @@ ApproxMC::SolCount Counter::count()
         cout << "c [appmc] Starting at hash count: " << hashCount << endl;
     }
     int64_t mPrev = hashCount;
-
     numHashList.clear();
     numCountList.clear();
 
@@ -437,6 +436,7 @@ ApproxMC::SolCount Counter::count()
     //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
     //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
     for (uint32_t j = 0; j < measurements; j++) {
+        cout<<"mPrev: "<<mPrev<<endl;
         one_measurement_count(
             mPrev
             , j
@@ -450,7 +450,6 @@ ApproxMC::SolCount Counter::count()
         }
     }
     assert(numHashList.size() > 0 && "UNSAT should not be possible");
-
     return calc_est_count();
 }
 
@@ -510,6 +509,7 @@ void Counter::one_measurement_count(
     SparseData sparse_data
 )
 {
+    cout<<"mPrev: "<<mPrev<<endl;
     //Tells the number of solutions found at hash number N
     //sols_for_hash[N] tells the number of solutions found when N hashes were added
     map<uint64_t,int64_t> sols_for_hash;
@@ -524,11 +524,13 @@ void Counter::one_measurement_count(
     HashesModels hm;
 
     int64_t total_max_xors = conf.sampling_set.size();
-    int64_t numExplored = 0;
+    cout<<"total max xors: "<<total_max_xors<<endl;
     int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
     int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
     int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
     int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
+
+    int64_t numExplored = total_max_xors-upperFib+lowerFib;
 
     int64_t hashCount = mPrev;
     int64_t hashPrev = hashCount;
@@ -539,7 +541,10 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
-    while (numExplored < min(m1+m2+1, int64_t(conf.sampling_set.size()))) {
+    while (numExplored < total_max_xors) {
+        cout<<endl<<"lo: "<<lowerFib<<endl<<endl;
+        cout<<endl<<"hi: "<<upperFib<<endl<<endl;
+        cout<<endl<<"hashCount: "<<hashCount<<endl<<endl;
         cout<<endl<<"numexplored: "<<numExplored<<endl<<endl;
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
@@ -595,33 +600,34 @@ void Counter::one_measurement_count(
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
                 }
-                upperFib = hashCount;
+                upperFib = min(hashCount,upperFib);
                 if (hashPrev > lowerFib) {
-                    lowerFib = hashPrev;
+                    lowerFib = max(hashPrev,lowerFib);
                 }
 
-                //Fast hit
-                if (false) {
-                    //Trying to hit the right place in case
-                    //we got some solutions here -- calculate the right place
-                    int64_t diff_delta = 0;
-                    if (num_sols > 0) {
-                        diff_delta = log2(threshold/(num_sols));
-                        if (diff_delta == 0){
-                            diff_delta = 1;
-                        }
-                        hashCount -= diff_delta;
-                    } else {
-                        hashCount = (upperFib+lowerFib)/2;
-                    }
-                } else {
+                // //Fast hit
+                // if (false) {
+                //     //Trying to hit the right place in case
+                //     //we got some solutions here -- calculate the right place
+                //     int64_t diff_delta = 0;
+                //     if (num_sols > 0) {
+                //         diff_delta = log2(threshold/(num_sols));
+                //         if (diff_delta == 0){
+                //             diff_delta = 1;
+                //         }
+                //         hashCount -= diff_delta;
+                //     } else {
+                //         hashCount = (upperFib+lowerFib)/2;
+                //     }
+                // } else {
                     //Slow hit
                     hashCount = (upperFib+lowerFib)/2;
-                }
+                // }
             }
         } else {
             assert(num_sols == threshold + 1);
             numExplored = hashCount + total_max_xors - upperFib;
+            cout<<endl<<"numexplored2: "<<numExplored<<endl<<endl;
 
             //success record for +1 hashcount exists and is 0
             //so one-above hashcount was below threshold, this is above
