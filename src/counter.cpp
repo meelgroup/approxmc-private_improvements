@@ -366,9 +366,9 @@ void Counter::set_up_probs_threshold_measurements(
         << endl;
     }
 
-    measurements = (int)std::ceil(std::log2(6.0/conf.delta)*17);
+    measurements = (int)std::ceil(std::log2(3.0/conf.delta)*17);
     for (int count = 0; count < 256; count++) {
-        if (constants.iterationConfidences[count] >= 1 - conf.delta/2) {
+        if (constants.iterationConfidences[count] >= 1 - conf.delta) {
             measurements = count*2+1;
             break;
         }
@@ -436,7 +436,6 @@ ApproxMC::SolCount Counter::count()
     //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
     //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
     for (uint32_t j = 0; j < measurements; j++) {
-        cout<<"mPrev: "<<mPrev<<endl;
         one_measurement_count(
             mPrev
             , j
@@ -540,11 +539,7 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
-    while (numExplored < total_max_xors) {
-        cout<<endl<<"lo: "<<lowerFib<<endl<<endl;
-        cout<<endl<<"hi: "<<upperFib<<endl<<endl;
-        cout<<endl<<"hashCount: "<<hashCount<<endl<<endl;
-        cout<<endl<<"numexplored: "<<numExplored<<endl<<endl;
+    while ((numExplored < total_max_xors) || (lowerFib<upperFib)) {
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
 
@@ -626,7 +621,6 @@ void Counter::one_measurement_count(
         } else {
             assert(num_sols == threshold + 1);
             numExplored = hashCount + total_max_xors - upperFib;
-            cout<<endl<<"numexplored2: "<<numExplored<<endl<<endl;
 
             //success record for +1 hashcount exists and is 0
             //so one-above hashcount was below threshold, this is above
