@@ -428,7 +428,7 @@ ApproxMC::SolCount Counter::count()
     if (conf.verb) {
         cout << "c [appmc] Starting at hash count: " << hashCount << endl;
     }
-    int64_t mPrev = hashCount;
+    int64_t mPrev = conf.roughmcvalue;
     numHashList.clear();
     numCountList.clear();
 
@@ -509,7 +509,6 @@ void Counter::one_measurement_count(
     SparseData sparse_data
 )
 {
-    cout<<"mPrev: "<<mPrev<<endl;
     //Tells the number of solutions found at hash number N
     //sols_for_hash[N] tells the number of solutions found when N hashes were added
     map<uint64_t,int64_t> sols_for_hash;
@@ -524,13 +523,13 @@ void Counter::one_measurement_count(
     HashesModels hm;
 
     int64_t total_max_xors = conf.sampling_set.size();
-    cout<<"total max xors: "<<total_max_xors<<endl;
     int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
     int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
     int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
     int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
 
     int64_t numExplored = total_max_xors-upperFib+lowerFib;
+    //number of hash counts from o to total_max_xors that do not need to be checked
 
     int64_t hashCount = mPrev;
     int64_t hashPrev = hashCount;
