@@ -66,6 +66,7 @@ public:
     AppMC();
     ~AppMC();
     std::string get_version_info();
+    int64_t get_roughmc();
     void set_projection_set(const std::vector<uint32_t>& vars);
     void setup_vars();
     ApproxMC::SolCount count();
@@ -107,10 +108,12 @@ public:
     void add_xor_clause(const std::vector<uint32_t>& vars, bool rhs);
     void print_stats(const double start_time);
 
-private:
+// private:
     ////////////////////////////
     // Do not bother with this, it's private
     ////////////////////////////
+//I made this public for now.
+public:
     AppMCPrivateData* data;
 };
 

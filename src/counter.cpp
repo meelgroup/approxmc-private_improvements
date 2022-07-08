@@ -56,8 +56,6 @@ using std::cerr;
 using std::endl;
 using std::list;
 using std::map;
-using std::max;
-using std::min;
 
 Hash Counter::add_hash(uint32_t hash_index, SparseData& sparse_data)
 {
@@ -496,9 +494,6 @@ int Counter::find_best_sparse_match()
     return -1;
 }
 
-
-//logSATsearch algorithm
-
 //See Algorithm 2+3 in paper "Algorithmic Improvements in Approximate Counting
 //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
 //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
@@ -522,6 +517,7 @@ void Counter::one_measurement_count(
     HashesModels hm;
 
     int64_t total_max_xors = conf.sampling_set.size();
+
     int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
     int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
     int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
@@ -539,7 +535,8 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
-    while ((numExplored < total_max_xors) || (lowerFib<upperFib)) {
+
+    while (numExplored < total_max_xors) {
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
 
@@ -860,4 +857,114 @@ bool Counter::check_model_against_hash(const Hash& h, const vector<lbool>& model
 
     //hence return !rhs
     return !rhs;
+}
+
+
+int64_t Counter::roughmc(){
+    SparseData sparse_data(-1);
+
+    HashesModels hm;
+    int64_t total_max_xors = conf.sampling_set.size();
+
+    int64_t lo=0;
+    int64_t hi= total_max_xors;
+    int64_t binaryHashIterator= (lo+hi)/2;
+    bool loop=true;
+    
+    while(loop){
+       // cout<<binaryHashIterator<<endl;
+        if(lo>=hi-1){loop=false;break;}
+        const vector<Lit> assumps = set_num_hashes(binaryHashIterator, hm.hashes, sparse_data);
+
+        SolNum sols = bounded_sol_count_for_roughmc(
+            &assumps, //assumptions to use
+            binaryHashIterator,
+            &hm
+        );
+        const uint64_t num_curr_sols = std::min<uint64_t>(sols.solutions,1);
+
+        if(num_curr_sols<1){
+            hi= binaryHashIterator;
+            binaryHashIterator= (lo+hi)/2;
+        }
+        else{
+            const vector<Lit> assumps_next = set_num_hashes(binaryHashIterator+1, hm.hashes, sparse_data);
+
+            SolNum sols_next = bounded_sol_count_for_roughmc(
+                &assumps_next, //assumptions to use
+                binaryHashIterator+1,
+                &hm
+            );
+            const uint64_t num_next_sols = std::min<uint64_t>(sols_next.solutions,1);
+
+            if(num_next_sols<1){
+                loop=false;
+                break;
+            }
+            else{
+                lo=binaryHashIterator;
+                binaryHashIterator= (lo+hi)/2;
+            }
+        }
+
+    }
+
+    return binaryHashIterator;
+}
+
+
+
+
+SolNum Counter::bounded_sol_count_for_roughmc(
+        const vector<Lit>* assumps,
+        const uint32_t hashCount,
+        HashesModels* hm
+) {
+   
+    //Set up things for adding clauses that can later be removed
+    vector<Lit> new_assumps;
+    if (assumps) {
+        assert(assumps->size() == hashCount);
+        new_assumps = *assumps;
+    } else {
+        assert(hashCount == 0);
+    }
+
+    solver->new_var();
+    const uint32_t sol_ban_var = solver->nVars()-1;
+    new_assumps.push_back(Lit(sol_ban_var, true));
+
+    const uint64_t repeat = add_glob_banning_cls(hm, sol_ban_var, hashCount);
+    uint64_t solutions = repeat;
+    double last_found_time = cpuTimeTotal();
+    vector<vector<lbool>> models;
+    while (solutions < 1) {
+        lbool ret = solver->solve(&new_assumps);
+        //COZ_PROGRESS_NAMED("one solution")
+        assert(ret == l_False || ret == l_True);
+
+        if (ret != l_True) {
+            break;
+        }
+
+        //Add solution to set
+        solutions++;
+        const vector<lbool> model = solver->get_model();
+        //#ifdef SLOW_DEBUG
+        check_model(model, hm, hashCount);
+        //#endif
+        models.push_back(model);
+
+        //ban solution
+        vector<Lit> lits;
+        lits.push_back(Lit(sol_ban_var, false));
+        for (const uint32_t var: conf.sampling_set) {
+            assert(solver->get_model()[var] != l_Undef);
+            lits.push_back(Lit(var, solver->get_model()[var] == l_True));
+        }
+
+        solver->add_clause(lits);
+    }
+
+    return SolNum(solutions, repeat);
 }
