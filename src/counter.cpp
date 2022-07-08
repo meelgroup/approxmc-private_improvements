@@ -43,6 +43,7 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <algorithm>
 //#include <coz.h>
 
 #include "counter.h"
@@ -56,6 +57,8 @@ using std::cerr;
 using std::endl;
 using std::list;
 using std::map;
+using std::min;
+using std::max;
 
 Hash Counter::add_hash(uint32_t hash_index, SparseData& sparse_data)
 {
@@ -380,6 +383,9 @@ ApproxMC::SolCount Counter::count()
     SparseData sparse_data(-1);
     uint32_t measurements;
     set_up_probs_threshold_measurements(measurements, sparse_data);
+
+    int64_t roughmcvalue= roughmc();
+    cout<<"roughmc: "<<roughmcvalue<<endl;
     
     if (conf.verb) {
         cout << "c [appmc] Starting up, initial measurement" << endl;
@@ -426,7 +432,8 @@ ApproxMC::SolCount Counter::count()
     if (conf.verb) {
         cout << "c [appmc] Starting at hash count: " << hashCount << endl;
     }
-    int64_t mPrev = conf.roughmcvalue;
+
+    int64_t mPrev = roughmcvalue;
     numHashList.clear();
     numCountList.clear();
 
@@ -435,6 +442,7 @@ ApproxMC::SolCount Counter::count()
     //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
     for (uint32_t j = 0; j < measurements; j++) {
         one_measurement_count(
+            roughmcvalue,
             mPrev
             , j
             , sparse_data
@@ -446,7 +454,7 @@ ApproxMC::SolCount Counter::count()
             simplify();
         }
     }
-    assert(numHashList.size() > 0 && "UNSAT should not be possible");
+    //assert(numHashList.size() > 0 && "UNSAT should not be possible");
     return calc_est_count();
 }
 
@@ -498,6 +506,7 @@ int Counter::find_best_sparse_match()
 //for Probabilistic Inference: From Linear to Logarithmic SAT Calls"
 //https://www.ijcai.org/Proceedings/16/Papers/503.pdf
 void Counter::one_measurement_count(
+    int64_t roughmcvalue,
     int64_t& mPrev,
     const int iter,
     SparseData sparse_data
@@ -520,8 +529,8 @@ void Counter::one_measurement_count(
 
     int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
     int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
-    int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
-    int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
+    int64_t lowerFib = std::max(int64_t(0),roughmcvalue - m1);
+    int64_t upperFib = std::min(total_max_xors,roughmcvalue + m2);
 
     int64_t numExplored = total_max_xors-upperFib+lowerFib;
     //number of hash counts from o to total_max_xors that do not need to be checked
@@ -591,9 +600,9 @@ void Counter::one_measurement_count(
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
                 }
-                upperFib = min(hashCount,upperFib);
+                upperFib = std::min(hashCount,upperFib);
                 if (hashPrev > lowerFib) {
-                    lowerFib = max(hashPrev,lowerFib);
+                    lowerFib = std::max(hashPrev,lowerFib);
                 }
 
                 // //Fast hit

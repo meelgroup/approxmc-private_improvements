@@ -397,10 +397,6 @@ int main(int argc, char** argv)
 
     print_num_solutions(sol_count.cellSolCount, sol_count.hashCount);
 
-    int64_t m_rough = appmc->get_roughmc();
-
-    cout<<endl<<"m_rough = "<<m_rough<<endl<<endl;
-
 
     delete appmc;
 }

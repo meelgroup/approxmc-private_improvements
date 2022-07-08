@@ -143,6 +143,7 @@ private:
     ////////////////
     void print_xor(const vector<uint32_t>& vars, const uint32_t rhs);
     void one_measurement_count(
+        int64_t roughmcvalue,
         int64_t& mPrev,
         const int iter,
         SparseData sparse_data

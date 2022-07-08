@@ -95,10 +95,6 @@ DLL_PUBLIC string AppMC::get_version_info()
     return data->counter.get_version_info();
 }
 
-DLL_PUBLIC int64_t AppMC::get_roughmc()
-{
-    return data->counter.roughmc();
-}
 
 DLL_PUBLIC void AppMC::set_up_log(string log_file_name)
 {
