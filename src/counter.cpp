@@ -426,8 +426,7 @@ ApproxMC::SolCount Counter::count()
     if (conf.verb) {
         cout << "c [appmc] Starting at hash count: " << hashCount << endl;
     }
-    int64_t mPrev = hashCount;
-
+    int64_t mPrev = conf.roughmcvalue;
     numHashList.clear();
     numCountList.clear();
 
@@ -448,7 +447,6 @@ ApproxMC::SolCount Counter::count()
         }
     }
     assert(numHashList.size() > 0 && "UNSAT should not be possible");
-
     return calc_est_count();
 }
 
@@ -519,9 +517,14 @@ void Counter::one_measurement_count(
     HashesModels hm;
 
     int64_t total_max_xors = conf.sampling_set.size();
-    int64_t numExplored = 0;
-    int64_t lowerFib = 0;
-    int64_t upperFib = total_max_xors;
+
+    int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
+    int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
+    int64_t lowerFib = max(int64_t(0),conf.roughmcvalue - m1);
+    int64_t upperFib = min(total_max_xors,conf.roughmcvalue + m2);
+
+    int64_t numExplored = total_max_xors-upperFib+lowerFib;
+    //number of hash counts from o to total_max_xors that do not need to be checked
 
     int64_t hashCount = mPrev;
     int64_t hashPrev = hashCount;
@@ -532,6 +535,7 @@ void Counter::one_measurement_count(
     //This is implemented by using two sentinels: lowerFib and upperFib. The correct answer 
     // is always between lowFib and upperFib. We do exponential search until upperFib < lowerFib/2
     // Once upperFib < lowerFib/2; we do a binary search. 
+
     while (numExplored < total_max_xors) {
         uint64_t cur_hash_count = hashCount;
         const vector<Lit> assumps = set_num_hashes(hashCount, hm.hashes, sparse_data);
@@ -587,29 +591,29 @@ void Counter::one_measurement_count(
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
                 }
-                upperFib = hashCount;
+                upperFib = min(hashCount,upperFib);
                 if (hashPrev > lowerFib) {
-                    lowerFib = hashPrev;
+                    lowerFib = max(hashPrev,lowerFib);
                 }
 
-                //Fast hit
-                if (false) {
-                    //Trying to hit the right place in case
-                    //we got some solutions here -- calculate the right place
-                    int64_t diff_delta = 0;
-                    if (num_sols > 0) {
-                        diff_delta = log2(threshold/(num_sols));
-                        if (diff_delta == 0){
-                            diff_delta = 1;
-                        }
-                        hashCount -= diff_delta;
-                    } else {
-                        hashCount = (upperFib+lowerFib)/2;
-                    }
-                } else {
+                // //Fast hit
+                // if (false) {
+                //     //Trying to hit the right place in case
+                //     //we got some solutions here -- calculate the right place
+                //     int64_t diff_delta = 0;
+                //     if (num_sols > 0) {
+                //         diff_delta = log2(threshold/(num_sols));
+                //         if (diff_delta == 0){
+                //             diff_delta = 1;
+                //         }
+                //         hashCount -= diff_delta;
+                //     } else {
+                //         hashCount = (upperFib+lowerFib)/2;
+                //     }
+                // } else {
                     //Slow hit
                     hashCount = (upperFib+lowerFib)/2;
-                }
+                // }
             }
         } else {
             assert(num_sols == threshold + 1);
