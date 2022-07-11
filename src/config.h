@@ -37,6 +37,7 @@ struct Config {
     uint32_t start_iter = 0;
     double epsilon = 0.80;
     double delta = 0.2;
+    double roughdelta=0.02;
     int sparse = 0;
     unsigned verb = 0;
     unsigned verb_cls = 0;

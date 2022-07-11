@@ -367,9 +367,9 @@ void Counter::set_up_probs_threshold_measurements(
         << endl;
     }
 
-    measurements = (int)std::ceil(std::log2(3.0/conf.delta)*17);
+    measurements = (int)std::ceil(std::log2(3.0/(conf.delta-conf.roughdelta))*17);
     for (int count = 0; count < 256; count++) {
-        if (constants.iterationConfidences[count] >= 1 - conf.delta) {
+        if (constants.iterationConfidences[count] >= 1 - (conf.delta-conf.roughdelta)) {
             measurements = count*2+1;
             break;
         }
@@ -527,8 +527,8 @@ void Counter::one_measurement_count(
 
     int64_t total_max_xors = conf.sampling_set.size();
 
-    int64_t m1= (int)std::ceil(std::log2((4.0- conf.delta)/conf.delta));
-    int64_t m2= (int)std::ceil(std::log2(4*(4.0- conf.delta)/conf.delta));
+    int64_t m1= (int)std::ceil(std::log2((1.0- conf.roughdelta)/conf.roughdelta));
+    int64_t m2= (int)std::ceil(std::log2(4*(1.0- conf.roughdelta)/conf.roughdelta));
     int64_t lowerFib = std::max(int64_t(0),roughmcvalue - m1);
     int64_t upperFib = std::min(total_max_xors,roughmcvalue + m2);
 
