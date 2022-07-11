@@ -384,8 +384,7 @@ ApproxMC::SolCount Counter::count()
     uint32_t measurements;
     set_up_probs_threshold_measurements(measurements, sparse_data);
 
-    int64_t roughmcvalue= roughmc();
-    cout<<"roughmc: "<<roughmcvalue<<endl;
+    int64_t roughmcvalue= roughmc()- log2(threshold);
     
     if (conf.verb) {
         cout << "c [appmc] Starting up, initial measurement" << endl;
@@ -455,6 +454,7 @@ ApproxMC::SolCount Counter::count()
         }
     }
     //assert(numHashList.size() > 0 && "UNSAT should not be possible");
+
     return calc_est_count();
 }
 
@@ -572,10 +572,8 @@ void Counter::one_measurement_count(
             iter, hashCount, found_full, num_sols, sols.repeated,
             cpuTime() - myTime
         );
-
         if (num_sols < threshold + 1) {
             numExplored = lowerFib + total_max_xors - hashCount;
-
             //one less hash count had threshold solutions
             //this one has less than threshold
             //so this is the real deal!
@@ -587,16 +585,14 @@ void Counter::one_measurement_count(
                 mPrev = hashCount;
                 return;
             }
-
             threshold_sols[hashCount] = 0;
             sols_for_hash[hashCount] = num_sols;
-            if (iter > 0 &&
-                std::abs(hashCount - mPrev) <= 2
-            ) {
+            if (std::abs(hashCount - mPrev) <= 2) {
                 //Doing linear, this is a re-count
                 upperFib = hashCount;
                 hashCount--;
-            } else {
+            } 
+            else {
                 if (hashPrev > hashCount) {
                     hashPrev = 0;
                 }
@@ -624,10 +620,10 @@ void Counter::one_measurement_count(
                     hashCount = (upperFib+lowerFib)/2;
                 // }
             }
-        } else {
+        } 
+        else {
             assert(num_sols == threshold + 1);
             numExplored = hashCount + total_max_xors - upperFib;
-
             //success record for +1 hashcount exists and is 0
             //so one-above hashcount was below threshold, this is above
             //we have a winner -- the one above!
@@ -639,21 +635,20 @@ void Counter::one_measurement_count(
                 mPrev = hashCount+1;
                 return;
             }
-
             threshold_sols[hashCount] = 1;
             sols_for_hash[hashCount] = threshold+1;
-            if (iter > 0
-                && std::abs(hashCount - mPrev) < 2
-            ) {
+            if (std::abs(hashCount - mPrev) < 2) {
                 //Doing linear, this is a re-count
                 lowerFib = hashCount;
                 hashCount++;
-            } else if (lowerFib + (hashCount-lowerFib)*2 >= upperFib-1) {
+            } 
+            else if (lowerFib + (hashCount-lowerFib)*2 >= upperFib-1) {
                 
                 // Whenever the above condition is satisfied, we are in binary sesarch mode
                 lowerFib = hashCount;
                 hashCount = (lowerFib+upperFib)/2;
-            } else {
+            } 
+            else {
                 
                 // We are in exponential search mode.
                 hashCount = lowerFib + (hashCount-lowerFib)*2;
